@@ -43,6 +43,28 @@ namespace libunwind {
 #include "EHHeaderParser.hpp"
 #include "Registers.hpp"
 
+#ifdef _LIBUNWIND_ARM_EHABI
+#include "wasmer_armehabi_unwind.hpp"
+
+static uintptr_t wasmer_text_base = 0;
+static uintptr_t wasmer_text_end = 0;
+static uintptr_t wasmer_axidx_base = 0;
+static uintptr_t wasmer_axidx_end = 0;
+
+void wasmer_unwind_armehabi_register(
+    void *text_begin, size_t text_size,
+    void *axidx_begin, size_t axidx_size
+) {
+    wasmer_text_base = (uintptr_t)text_begin;
+    wasmer_axidx_base = (uintptr_t)axidx_begin;
+    wasmer_text_end = wasmer_text_base + static_cast<uintptr_t>(text_size);
+    wasmer_axidx_end = wasmer_axidx_base + static_cast<uintptr_t>(axidx_size);
+}
+
+void wasmer_unwind_armehabi_deregister(void *text_begin) {}
+
+#endif
+
 #ifdef __APPLE__
 
   struct dyld_unwind_sections
@@ -567,7 +589,16 @@ inline bool LocalAddressSpace::findUnwindSections(pint_t targetAddr,
  #endif
       },
       &cb_data);
-  return static_cast<bool>(found);
+  //return static_cast<bool>(found);
+  if (found) {
+      return true;
+  } else if (targetAddr >= wasmer_text_base && targetAddr < wasmer_text_end) {
+     info.arm_section = wasmer_axidx_base;
+     info.arm_section_length = wasmer_axidx_end - wasmer_axidx_base;
+     return true;
+  } else {
+      return false;
+  }
 #endif
 
   return false;
